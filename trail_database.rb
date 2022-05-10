@@ -1,5 +1,6 @@
 require "nokogiri"
 require "httparty"
+require "pry"
 
 class TrailWebScraper
 	attr_reader :trail_data
@@ -8,6 +9,8 @@ class TrailWebScraper
 		@urls = urls
 		@trail_data = parse_urls
 	end
+
+	private
 
 	def parse_urls
 		trail_data = []
@@ -22,19 +25,60 @@ class TrailWebScraper
 	  	stats = parsed_webpg.css('td.TD_STATS')
     	raw_trail_stats = stats.css("td.aL").text
 
-    	trail_data << prep_trail_info(trailname, 
-    																distance_descriptor(stat_descriptions),
-    																raw_trail_stats)
+			distance_desc = find_descriptor(stat_descriptions, "Distance", "Trailhead")
+			avg_time_desc = find_descriptor(stat_descriptions, "Avg", "Kokopelli")
+
+    	trail_data << prep_trail_info(trailname, distance_desc, avg_time_desc, 	raw_trail_stats)
    end
    trail_data
 	end
 
-	def prep_trail_info(name, distance_descriptor, stats)
+	def prep_trail_info(name, distance_descriptor, avg_time_descriptor, stats)
 		split_stats = separate_stats(stats)
-		{ "name" => name,
-			distance_descriptor => split_stats[0],
-		  "elevation_gain" => split_stats[2],
-		  "avg_round_trip" => split_stats[4]}
+		current_distance = split_stats[0],
+		full_distance = distance_round_trip(distance_descriptor, current_distance)
+		avg_time = avg_time_round_trip(avg_time_descriptor, split_stats[4])
+
+		{ name: name,
+		  distance_round_trip: full_distance,
+		  elevation_gain: stat_as_integer(split_stats[2], "feet"),
+		  avg_time_round_trip: avg_time }
+	end
+
+	def avg_time_round_trip(descriptor, time_string)
+		multiplier = round_trip_multiplier(descriptor)
+		return nil if (multiplier == -1 || time_string.nil?)
+
+		unit = time_string.chars.select { |char| char =~ /[a-z]/i }.join('')
+		dividor = unit =~ /(hour)/ ? 1 : 60
+
+		(string_to_number(time_string) / dividor * multiplier).round(2)
+	end
+
+	def distance_round_trip(descriptor, distance)
+		multiplier = round_trip_multiplier(descriptor)
+		return nil if (multiplier == -1 || distance.nil?)
+		
+		string_to_number(distance) * multiplier
+	end
+
+	def round_trip_multiplier(descriptor)
+		if descriptor =~ /(One Way)/
+			2
+		elsif descriptor =~ /(Round Trip)/
+			1
+		else
+			-1
+		end
+	end
+
+	def string_to_number(measurement)
+		measurement.chars.select { |char| char =~ /[0-9.\-]/ }.join('').to_f
+	end
+
+	def stat_as_integer(stat, unit_to_remove)
+		return nil if stat.nil?
+		stat.delete(unit_to_remove).delete(",").to_i
 	end
 
 	def find_starting_index(string, starting_letter, word)
@@ -48,12 +92,14 @@ class TrailWebScraper
 		desired_index
 	end
 
-	def distance_descriptor(string)
-		trailhead_index = find_starting_index(string, "T", "Trailhead")
-		unneeded_suffix = string[trailhead_index..(string.size - 1)]
+	def find_descriptor(string, first_word, suffix_first_word)
+		suffix_letter = suffix_first_word[0]
+		suffix_starting_index = find_starting_index(string, suffix_letter, suffix_first_word)
 
-		distance_desc_index = find_starting_index(string, "D", "Distance")
-		unneeded_prefix = string[0..(distance_desc_index - 1)]
+		unneeded_suffix = string[suffix_starting_index..(string.size - 1)]
+
+	  desired_desc_index = find_starting_index(string, first_word[0], first_word)
+		unneeded_prefix = string[0..(desired_desc_index - 1)]
 
 		string.delete_suffix(unneeded_suffix).delete_prefix(unneeded_prefix)
 	end
@@ -88,7 +134,6 @@ class TrailWebScraper
 		end
 		breakpts
 	end
-
 end
 
 urls = ["https://hikearizona.com/decoder.php?ZTN=19215",
@@ -98,30 +143,30 @@ urls = ["https://hikearizona.com/decoder.php?ZTN=19215",
 	      "https://hikearizona.com/decoder.php?ZTN=713",
 	      "https://hikearizona.com/decoder.php?ZTN=16353",
 	      "https://hikearizona.com/decoder.php?ZTN=673",
-			  "https://hikearizona.com/decoder.php?ZTN=21",
-			  "https://hikearizona.com/decoder.php?ZTN=17581",
-			  "https://hikearizona.com/decoder.php?ZTN=20142",
-			  "https://hikearizona.com/decoder.php?ZTN=861",
-			  "https://hikearizona.com/decoder.php?ZTN=1038",
-			  "https://hikearizona.com/decoder.php?ZTN=16624",
-			  "https://hikearizona.com/decoder.php?ZTN=15257",
-			  "https://hikearizona.com/decoder.php?ZTN=16362",
-			  "https://hikearizona.com/decoder.php?ZTN=819",
-			  "https://hikearizona.com/decoder.php?ZTN=1455",
-			  "https://hikearizona.com/decoder.php?ZTN=2033",
-			  "https://hikearizona.com/decoder.php?ZTN=289",
-			  "https://hikearizona.com/decoder.php?ZTN=17085",
-			  "https://hikearizona.com/decoder.php?ZTN=95",
-			  "https://hikearizona.com/decoder.php?ZTN=13",
-			  "https://hikearizona.com/decoder.php?ZTN=61",
-			  "https://hikearizona.com/decoder.php?ZTN=1422",
-			  "https://hikearizona.com/decoder.php?ZTN=374",
-			  "https://hikearizona.com/decoder.php?ZTN=16311",
-			  "https://hikearizona.com/decoder.php?ZTN=152", 
-			  "https://hikearizona.com/decoder.php?ZTN=20983",
-			  "https://hikearizona.com/decoder.php?ZTN=686",
-			  "https://hikearizona.com/decoder.php?ZTN=1459",
-			  "https://hikearizona.com/decoder.php?ZTN=2074"]
+	      "https://hikearizona.com/decoder.php?ZTN=21",
+	      "https://hikearizona.com/decoder.php?ZTN=17581",
+	      "https://hikearizona.com/decoder.php?ZTN=20142",
+	      "https://hikearizona.com/decoder.php?ZTN=861",
+	      "https://hikearizona.com/decoder.php?ZTN=1038",
+	      "https://hikearizona.com/decoder.php?ZTN=16624",
+	      "https://hikearizona.com/decoder.php?ZTN=15257",
+	      "https://hikearizona.com/decoder.php?ZTN=16362",
+	      "https://hikearizona.com/decoder.php?ZTN=819",
+	      "https://hikearizona.com/decoder.php?ZTN=1455",
+	      "https://hikearizona.com/decoder.php?ZTN=2033",
+	      "https://hikearizona.com/decoder.php?ZTN=289",
+	      "https://hikearizona.com/decoder.php?ZTN=17085",
+	      "https://hikearizona.com/decoder.php?ZTN=95",
+	      "https://hikearizona.com/decoder.php?ZTN=13",
+	      "https://hikearizona.com/decoder.php?ZTN=61",
+	      "https://hikearizona.com/decoder.php?ZTN=1422",
+	      "https://hikearizona.com/decoder.php?ZTN=374",
+	      "https://hikearizona.com/decoder.php?ZTN=16311",
+	      "https://hikearizona.com/decoder.php?ZTN=152",
+	      "https://hikearizona.com/decoder.php?ZTN=20983",
+	      "https://hikearizona.com/decoder.php?ZTN=686",
+	      "https://hikearizona.com/decoder.php?ZTN=1459",
+	      "https://hikearizona.com/decoder.php?ZTN=2074"]
 
 scraper = TrailWebScraper.new(urls)
 p scraper.trail_data
