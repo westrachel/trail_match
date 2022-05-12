@@ -35,14 +35,14 @@ class TrailWebScraper
 
 	def prep_trail_info(name, distance_descriptor, avg_time_descriptor, stats)
 		split_stats = separate_stats(stats)
-		current_distance = split_stats[0],
+		current_distance = split_stats[0]
 		full_distance = distance_round_trip(distance_descriptor, current_distance)
 		avg_time = avg_time_round_trip(avg_time_descriptor, split_stats[4])
 
 		{ name: name,
 		  distance_round_trip: full_distance,
 		  elevation_gain: stat_as_integer(split_stats[2], "feet"),
-		  avg_time_round_trip: avg_time }
+		  avg_round_trip_time: avg_time }
 	end
 
 	def avg_time_round_trip(descriptor, time_string)
@@ -169,4 +169,52 @@ urls = ["https://hikearizona.com/decoder.php?ZTN=19215",
 	      "https://hikearizona.com/decoder.php?ZTN=2074"]
 
 scraper = TrailWebScraper.new(urls)
-p scraper.trail_data
+
+
+File.open("schema.sql", "w+") do |f| 
+	f.write(<<~SQL
+  	CREATE TABLE trails (
+  		id serial PRIMARY KEY,
+  		name text NOT NULL,
+  		distance_round_trip decimal(4,2),
+  		distance_units varchar(20) DEFAULT 'miles',
+  		elevation_gain integer,
+  		avg_round_trip_time decimal(4, 2),
+  		avg_rtt_units varchar(20) DEFAULT 'hours'
+  	);
+
+		CREATE TABLE users (
+			id serial PRIMARY KEY,
+			name text NOT NULL,
+			password text NOT NULL
+		);
+
+		CREATE TABLE users_trails (
+			id serial PRIMARY KEY,
+			favorited_trail_flag boolean DEFAULT FALSE,
+			number_of_visits integer,
+			trail_id integer NOT NULL,
+			user_id integer NOT NULL,
+			FOREIGN KEY (trail_id) REFERENCES trails (id) ON DELETE CASCADE,
+			FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+		);
+SQL
+)
+
+def prevent_blank_from_interpolation(value)
+	value.nil? ? "NULL" : value
+end
+
+	scraper.trail_data.each do |trail|
+		prepped_name = trail[:name].gsub("'", "''")
+		prepped_distance = prevent_blank_from_interpolation(trail[:distance_round_trip])
+		prepped_ev_gain = prevent_blank_from_interpolation(trail[:elevation_gain])
+		prepped_avg_rtt = prevent_blank_from_interpolation(trail[:avg_round_trip_time])
+		
+		f.write(<<~SQL
+			INSERT INTO trails (name, distance_round_trip, elevation_gain, avg_round_trip_time)
+				VALUES ('#{prepped_name}', #{prepped_distance}, #{prepped_ev_gain}, #{prepped_avg_rtt});
+		SQL
+		)
+	end
+end
