@@ -11,13 +11,27 @@ class DatabasePersistence
 		@db.exec_params(sql, parameters)
 	end
 
-	def sort_trails(trait, sort_order)
-		query("SELECT * FROM trails ORDER BY $1 $2;", trait, sort_order)
+	def sql_select(end_of_statement)
+    <<~SQL
+      SELECT id, name, distance_round_trip,
+      			 elevation_gain_ft, avg_round_trip_time
+      	FROM trails#{end_of_statement}
+    SQL
+	end
+
+	def sort_trails(column, sort_order)
+		end_clause = sort_order == "DESC" ? "$1 DESC;" : "$1;"
+		command = sql_select(" ORDER BY #{end_clause}")
+		data = query(command, column)
+		format_query_result(data)
 	end
 
 	def all_trails
-		sql = "SELECT * FROM trails;"
-		data = query(sql)
+		result = query(sql_select(";"))
+    format_query_result(result)
+	end
+
+	def format_query_result(data)
 		data.map do |tuple|
 			{ id: tuple["id"].to_i,
 		 	  name: tuple["name"],
@@ -26,5 +40,9 @@ class DatabasePersistence
 		 	  avg_round_trip_time: tuple["avg_round_trip_time"]
 		 	}
 		end
+	end
+
+	def number_trails
+		all_trails.size
 	end
 end
