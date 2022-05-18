@@ -21,10 +21,9 @@ end
 
 helpers do
   def find_prior_trail(current_idx)
-    max_negative_idx = -1 * @storage.number_trails
-    all_indices = (max_negative_idx..-1).to_a
     new_idx = current_idx - 1
-    all_indices.include?(new_idx) ? new_idx : -1
+    max_idx = @storage.number_trails - 1
+    new_idx == -1 ? max_idx : new_idx
   end
 
   def find_next_trail(current_idx)
